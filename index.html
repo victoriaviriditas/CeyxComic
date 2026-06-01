@@ -222,6 +222,10 @@ body::after{
   transition:transform 0.78s cubic-bezier(0.36,0.07,0.19,0.97);
 }
 .strip.dragging{cursor:grabbing;}
+/* A flipped strip rests on the left half showing its verso.
+   It keeps pointer events (so it can be flipped back) but its low
+   z-index keeps it from covering right-side pages. */
+.strip.flipped, .leaf.flipped { cursor:grab; }
 
 /* Proportions from red-line guide */
 .s-top{top:0;      height:35.95%;}
@@ -541,23 +545,30 @@ function refresh() {
       ? leaf.splitAngles.every(a => a >= 90)
       : leaf.angle >= 90;
 
-    // Unflipped leaves: stack so leaf 0 is on top (highest z)
-    // Flipped leaves:   stack so last-flipped is on top of left pile
-    const z = fullyFlipped ? (li + 1) : (NL * 10 - li * 10);
-
     if (leaf.split) {
-      leaf.strips.forEach(s => s.el.style.zIndex = z);
-      // Cut lines follow same z as their leaf, slightly above
-      if (leaf.cutMid) leaf.cutMid.style.zIndex = z + 1;
-      if (leaf.cutBot) leaf.cutBot.style.zIndex = z + 1;
-      // Show cuts only when this leaf is on top of unflipped stack
+      // Compute z PER STRIP based on that strip's own angle.
+      // A strip past 90° belongs on the LEFT pile (low z, earlier-flipped underneath).
+      // A strip under 90° belongs on the RIGHT stack (high z, leaf 0 on top).
+      leaf.strips.forEach(s => {
+        const flippedStrip = s.angle >= 90;
+        const z = flippedStrip ? (li + 1) : (NL * 10 - li * 10);
+        s.el.style.zIndex = z;
+        // A flipped strip sits on the left; it must not block the strip
+        // beneath it on the right, nor the next leaf. Only the CURRENT
+        // top-of-right strip should grab pointer events.
+        s.el.classList.toggle('flipped', flippedStrip);
+      });
+      // Cut lines: shown only when this whole leaf is the current top unflipped leaf
       const onTop = !fullyFlipped && leaves.slice(0,li).every(l =>
         l.split ? l.splitAngles.every(a=>a>=90) : l.angle>=90
       );
-      if (leaf.cutMid) leaf.cutMid.style.display = onTop ? 'block' : 'none';
-      if (leaf.cutBot) leaf.cutBot.style.display = onTop ? 'block' : 'none';
+      const rightZ = NL * 10 - li * 10;
+      if (leaf.cutMid) { leaf.cutMid.style.zIndex = rightZ + 1; leaf.cutMid.style.display = onTop ? 'block' : 'none'; }
+      if (leaf.cutBot) { leaf.cutBot.style.zIndex = rightZ + 1; leaf.cutBot.style.display = onTop ? 'block' : 'none'; }
     } else {
+      const z = fullyFlipped ? (li + 1) : (NL * 10 - li * 10);
       leaf.el.style.zIndex = z;
+      leaf.el.classList.toggle('flipped', fullyFlipped);
     }
   });
 
